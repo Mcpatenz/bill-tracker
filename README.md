@@ -1,36 +1,178 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Mcpatenz Bill Tracker — Never Miss a Due Date
 
-## Getting Started
+A calm, full-stack bill tracker for rent, utilities, subscriptions and one-off
+payments. Mcpatenz Bill Tracker rolls recurring bills forward when you pay them, shows what is
+due next, and sends email reminders before (or on) the due date.
 
-First, run the development server:
+Built with **Next.js 16**, **React 19**, **TypeScript**, **Tailwind CSS 4**,
+**Prisma 6**, **Three.js**, **Motion** and **Recharts**.
+
+## Features
+
+- Email/password auth with hashed passwords and HTTP-only JWT sessions.
+- Dashboard with cash-flow chart, category breakdown, upcoming bills and stats.
+- Recurring bills (weekly, monthly, quarterly, yearly, one-time) that roll to
+  the next due date when marked paid.
+- Per-bill reminder lead time plus account-level default; daily email reminder
+  sweep with duplicate protection.
+- In-app notification inbox built from your real unpaid bills, with unread badge,
+  per-item read and mark-all-read.
+- Bills workspace with search, status tabs, category filter, sorting and
+  responsive layouts down to small phones.
+- Settings for profile, reminder address, currency, lead time, password and
+  test email delivery.
+- Admin dashboard for reviewing registered accounts, inspecting any user's bills
+  and removing accounts or bills when needed.
+- Three.js hero, Motion page transitions, reduced-motion support, SEO metadata,
+  Open Graph image, sitemap, robots and PWA manifest.
+- Accessible dark UI (keyboard focus states, labels, 0 serious/critical WCAG
+  A/AA axe findings across desktop, tablet and mobile).
+
+## Quick start
+
+Requirements: Node.js 20+ and npm.
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+npm install
+cp .env.example .env
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Generate secrets and add them to `.env`:
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+```bash
+node -e "console.log(require('crypto').randomBytes(48).toString('hex'))"
+```
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+Set `AUTH_SECRET` and `CRON_SECRET` to that value (use two separate values).
+Then create the SQLite database:
 
-## Learn More
+```bash
+npm run db:push
+npm run dev
+```
 
-To learn more about Next.js, take a look at the following resources:
+Open `http://localhost:3000` and create an account to get started.
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## Environment variables
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+| Variable | Required | Purpose |
+| --- | --- | --- |
+| `DATABASE_URL` | yes | `file:./dev.db` for local SQLite |
+| `AUTH_SECRET` | yes | Signs session JWTs (long random string) |
+| `NEXT_PUBLIC_SITE_URL` | recommended | Canonical URL used by metadata and sitemap |
+| `CRON_SECRET` | yes for reminders | Protects the reminder cron endpoint |
+| `SMTP_HOST` / `SMTP_PORT` / `SMTP_SECURE` | for SMTP | Mail server (Gmail: `smtp.gmail.com`, `465`, `true`) |
+| `SMTP_USER` / `SMTP_PASS` | for SMTP | SMTP login; Gmail requires an App Password |
+| `RESEND_API_KEY` | optional | Use Resend instead of SMTP |
+| `EMAIL_FROM` | recommended | From header, e.g. `Mcpatenz Bill Tracker <you@gmail.com>` |
+| `ADMIN_EMAILS` | optional | Comma-separated emails promoted to admin on sign-in |
 
-## Deploy on Vercel
+If no email transport is configured, Mcpatenz Bill Tracker runs in development mode: it logs
+the rendered email and still creates the in-app notification.
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+### Gmail App Password
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+1. Enable 2-Step Verification on the Google account.
+2. Create an App Password at <https://myaccount.google.com/apppasswords>.
+3. Set `SMTP_USER` to the Gmail address and `SMTP_PASS` to the 16-character
+   app password (no spaces). Use `EMAIL_FROM="Mcpatenz Bill Tracker <same@gmail.com>"`.
+
+Use **Test email** in Settings to verify delivery.
+
+## Reminders
+
+In-app notifications are synced from your unpaid bills whenever you open the
+dashboard or the notification inbox, so the bell always reflects real bill data
+without needing a cron job.
+
+Email reminders are generated by a daily sweep:
+
+```bash
+curl -H "Authorization: Bearer $CRON_SECRET" \
+  http://localhost:3000/api/cron/reminders
+```
+
+`vercel.json` schedules this at `0 8 * * *` (08:00 UTC). For other hosts, add a
+daily cron job or scheduler request with the same header. The endpoint is
+idempotent per bill per day, so repeated calls do not duplicate notifications.
+
+## Admin access
+
+Admin accounts can open **Admin** in the dashboard navigation to review every
+registered user, inspect the bills on any account and delete bills or users.
+Admins cannot delete their own account, and the last remaining admin is
+protected.
+
+Promote an existing account from the command line:
+
+```bash
+npm run admin:promote -- you@example.com
+```
+
+Alternatively, add comma-separated addresses to `ADMIN_EMAILS`; matching
+accounts are promoted automatically the next time they sign in or register.
+
+## Scripts
+
+| Script | Description |
+| --- | --- |
+| `npm run dev` | Start the development server |
+| `npm run build` | Production build |
+| `npm run start` | Start the production server |
+| `npm run lint` | ESLint |
+| `npm run typecheck` | TypeScript without emitting |
+| `npm run db:push` | Push the Prisma schema |
+| `npm run db:studio` | Open Prisma Studio |
+| `npm run admin:promote` | Grant the admin role to an existing email |
+
+## Project structure
+
+```
+prisma/                 schema and database files
+src/app/                App Router pages, layout, SEO, API routes
+src/components/         landing, auth, dashboard, bills and UI components
+src/lib/                auth, prisma, dates, reminders, mail, dashboard data
+```
+
+Key backend pieces:
+
+- `src/lib/auth.ts` — session cookie creation/verification and route guards.
+- `src/lib/reminders.ts` — reminder sweep, duplicate suppression, notification
+  and email delivery.
+- `src/lib/mail.ts` — responsive HTML email template and SMTP/Resend transport.
+- `src/app/api/**` — auth, bills, payments, settings, notifications and cron.
+
+## Deployment
+
+### Vercel
+
+1. Push the repository and import it into Vercel.
+2. Add the environment variables from `.env.example` (leave `DATABASE_URL`
+   pointing at a hosted database — see below).
+3. Deploy. `vercel.json` registers the daily reminder cron automatically.
+4. Set `NEXT_PUBLIC_SITE_URL` to the production domain and redeploy.
+
+### Database
+
+SQLite is intended for local development and a single long-lived server. It is
+**not** suitable for Vercel/serverless deployments because the filesystem is
+ephemeral. For production, switch the Prisma provider to PostgreSQL (Neon,
+Supabase, Railway, etc.) or use a hosted SQLite service such as Turso:
+
+1. Change `provider` in `prisma/schema.prisma`.
+2. Set `DATABASE_URL` to the hosted connection string.
+3. Run `npx prisma db push` (or create a migration) if needed.
+
+### Reminder cron on other platforms
+
+If the host does not support `vercel.json` crons, call
+`GET /api/cron/reminders` once a day with
+`Authorization: Bearer <CRON_SECRET>`.
+
+## Security notes
+
+- Never commit `.env` or real SMTP/Resend credentials.
+- Use long random values for `AUTH_SECRET` and `CRON_SECRET`.
+- Sessions are HTTP-only, `SameSite=Lax`, and `Secure` in production.
+- Passwords are hashed with bcrypt; API routes validate input with Zod and
+  scope every query to the signed-in user.
