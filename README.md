@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # Mcpatenz Bill Tracker — Never Miss a Due Date
 
 A calm, full-stack bill tracker for rent, utilities, subscriptions and one-off
@@ -176,3 +177,6 @@ If the host does not support `vercel.json` crons, call
 - Sessions are HTTP-only, `SameSite=Lax`, and `Secure` in production.
 - Passwords are hashed with bcrypt; API routes validate input with Zod and
   scope every query to the signed-in user.
+=======
+# bill-tracker
+>>>>>>> origin/main
