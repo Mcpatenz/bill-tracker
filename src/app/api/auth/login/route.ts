@@ -1,38 +1,28 @@
 import { NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
-import { createSession, verifyPassword } from "@/lib/auth";
+import { createClient } from "@/lib/supabase/server";
 import { loginSchema } from "@/lib/validation";
-import { ADMIN_ROLE, isBootstrapAdmin } from "@/lib/roles";
 import { apiError, serverError, validationError } from "@/lib/api";
 
 export async function POST(request: Request) {
   try {
     const body = await request.json().catch(() => null);
     const parsed = loginSchema.safeParse(body);
-
     if (!parsed.success) return validationError(parsed.error);
 
-    const user = await prisma.user.findUnique({
-      where: { email: parsed.data.email.toLowerCase() },
+    const supabase = await createClient();
+    const { error } = await supabase.auth.signInWithPassword({
+      email: parsed.data.email.trim().toLowerCase(),
+      password: parsed.data.password,
     });
 
-    if (!user) {
-      return apiError("Incorrect email or password.", 401);
+    if (error?.code === "email_not_confirmed") {
+      return apiError("Check your inbox and confirm your email before signing in.", 403);
     }
-
-    const valid = await verifyPassword(parsed.data.password, user.passwordHash);
-    if (!valid) {
-      return apiError("Incorrect email or password.", 401);
+    if (error?.status === 429) {
+      return apiError("Too many sign-in attempts. Please wait a moment and try again.", 429);
     }
+    if (error) return apiError("Incorrect email or password.", 401);
 
-    if (isBootstrapAdmin(user.email) && user.role !== ADMIN_ROLE) {
-      await prisma.user.update({
-        where: { id: user.id },
-        data: { role: ADMIN_ROLE },
-      });
-    }
-
-    await createSession(user.id);
     return NextResponse.json({ ok: true });
   } catch (error) {
     return serverError(error);

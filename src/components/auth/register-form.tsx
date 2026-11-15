@@ -31,6 +31,7 @@ export function RegisterForm() {
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [confirmationNotice, setConfirmationNotice] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
 
   const score = useMemo(() => passwordScore(password), [password]);
@@ -38,6 +39,7 @@ export function RegisterForm() {
   async function onSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setError(null);
+    setConfirmationNotice(null);
     setFieldErrors({});
 
     if (password.length < 8) {
@@ -73,6 +75,15 @@ export function RegisterForm() {
         setError(message);
         setFieldErrors(data.fieldErrors ?? {});
         toast({ title: "Could not create account", description: message, variant: "error" });
+        return;
+      }
+
+      if (data.confirmationRequired) {
+        setConfirmationNotice(`We sent a confirmation link to ${email.trim()}. Open it to activate your account.`);
+        toast({
+          title: "Check your inbox",
+          description: "Confirm your email to finish creating your account.",
+        });
         return;
       }
 
@@ -126,6 +137,15 @@ export function RegisterForm() {
           </motion.div>
         ) : null}
       </AnimatePresence>
+
+      {confirmationNotice ? (
+        <div
+          role="status"
+          className="mt-5 rounded-xl border border-mint/30 bg-mint/10 px-3.5 py-3 text-xs font-medium leading-relaxed text-mint-soft"
+        >
+          {confirmationNotice}
+        </div>
+      ) : null}
 
       <form onSubmit={onSubmit} className="mt-6 space-y-4" noValidate>
         <Input

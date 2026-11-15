@@ -1,4 +1,5 @@
-import { prisma } from "./prisma";
+import { createClient } from "./supabase/server";
+import { mapBill, mapNotification, mapPayment } from "./supabase/records";
 import { daysUntil, lastMonths, monthKey } from "./dates";
 import { categoryMeta } from "./constants";
 
@@ -70,22 +71,25 @@ export function serializeBill(bill: {
 }
 
 export async function getDashboardData(userId: string): Promise<DashboardData> {
+  const supabase = await createClient();
   const months = lastMonths(6);
-  const rangeStart = months[0].date;
+  const rangeStart = months[0].date.toISOString();
 
-  const [bills, payments, notifications, unreadNotifications] = await Promise.all([
-    prisma.bill.findMany({ where: { userId }, orderBy: { dueDate: "asc" } }),
-    prisma.payment.findMany({
-      where: { userId, paidAt: { gte: rangeStart } },
-      orderBy: { paidAt: "asc" },
-    }),
-    prisma.notification.findMany({
-      where: { userId },
-      orderBy: { createdAt: "desc" },
-      take: 8,
-    }),
-    prisma.notification.count({ where: { userId, readAt: null } }),
+  const [billResult, paymentResult, notificationResult, unreadResult] = await Promise.all([
+    supabase.from("bills").select("*").eq("user_id", userId).order("due_date", { ascending: true }),
+    supabase.from("payments").select("*").eq("user_id", userId).gte("paid_at", rangeStart).order("paid_at", { ascending: true }),
+    supabase.from("notifications").select("*").eq("user_id", userId).order("created_at", { ascending: false }).limit(8),
+    supabase.from("notifications").select("id", { count: "exact", head: true }).eq("user_id", userId).is("read_at", null),
   ]);
+  if (billResult.error) throw billResult.error;
+  if (paymentResult.error) throw paymentResult.error;
+  if (notificationResult.error) throw notificationResult.error;
+  if (unreadResult.error) throw unreadResult.error;
+
+  const bills = (billResult.data ?? []).map(mapBill);
+  const payments = (paymentResult.data ?? []).map(mapPayment);
+  const notifications = (notificationResult.data ?? []).map(mapNotification);
+  const unreadNotifications = unreadResult.count ?? 0;
 
   const now = new Date();
   const currentMonth = monthKey(now);
@@ -94,15 +98,9 @@ export async function getDashboardData(userId: string): Promise<DashboardData> {
   const unpaid = bills.filter((bill) => !bill.isPaid);
   const serialized = bills.map(serializeBill);
   const serializedUnpaid = serialized.filter((bill) => !bill.isPaid);
-
   const dueThisMonthBills = unpaid.filter((bill) => monthKey(bill.dueDate) === currentMonth);
-  const paidThisMonth = payments
-    .filter((payment) => monthKey(payment.paidAt) === currentMonth)
-    .reduce((total, payment) => total + payment.amount, 0);
-  const paidLastMonth = payments
-    .filter((payment) => monthKey(payment.paidAt) === previousMonth)
-    .reduce((total, payment) => total + payment.amount, 0);
-
+  const paidThisMonth = payments.filter((payment) => monthKey(payment.paidAt) === currentMonth).reduce((total, payment) => total + payment.amount, 0);
+  const paidLastMonth = payments.filter((payment) => monthKey(payment.paidAt) === previousMonth).reduce((total, payment) => total + payment.amount, 0);
   const overdueBills = unpaid.filter((bill) => daysUntil(bill.dueDate) < 0);
   const dueSoon = unpaid.filter((bill) => {
     const days = daysUntil(bill.dueDate);
@@ -110,32 +108,19 @@ export async function getDashboardData(userId: string): Promise<DashboardData> {
   });
 
   const categoryTotals = new Map<string, number>();
-  for (const bill of unpaid) {
-    categoryTotals.set(bill.category, (categoryTotals.get(bill.category) ?? 0) + bill.amount);
-  }
+  for (const bill of unpaid) categoryTotals.set(bill.category, (categoryTotals.get(bill.category) ?? 0) + bill.amount);
   const categorySum = [...categoryTotals.values()].reduce((total, value) => total + value, 0);
-
   const categories = [...categoryTotals.entries()]
     .map(([value, amount]) => {
       const meta = categoryMeta(value);
-      return {
-        value,
-        label: meta.label,
-        color: meta.color,
-        amount,
-        share: categorySum > 0 ? amount / categorySum : 0,
-      };
+      return { value, label: meta.label, color: meta.color, amount, share: categorySum > 0 ? amount / categorySum : 0 };
     })
     .sort((a, b) => b.amount - a.amount);
 
   const series = months.map((month) => ({
     label: month.label,
-    paid: payments
-      .filter((payment) => monthKey(payment.paidAt) === month.key)
-      .reduce((total, payment) => total + payment.amount, 0),
-    due: unpaid
-      .filter((bill) => monthKey(bill.dueDate) === month.key)
-      .reduce((total, bill) => total + bill.amount, 0),
+    paid: payments.filter((payment) => monthKey(payment.paidAt) === month.key).reduce((total, payment) => total + payment.amount, 0),
+    due: unpaid.filter((bill) => monthKey(bill.dueDate) === month.key).reduce((total, bill) => total + bill.amount, 0),
   }));
 
   return {

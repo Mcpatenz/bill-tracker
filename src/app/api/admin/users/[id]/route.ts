@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
+import { createClient } from "@/lib/supabase/server";
 import { getApiUser } from "@/lib/auth";
 import { ADMIN_ROLE, isAdminRole } from "@/lib/roles";
 import { apiError, forbidden, serverError, unauthorized } from "@/lib/api";
@@ -11,23 +11,19 @@ export async function DELETE(_request: Request, context: Context) {
     const admin = await getApiUser();
     if (!admin) return unauthorized();
     if (!isAdminRole(admin.role)) return forbidden("Admin access required.");
-
     const { id } = await context.params;
-    const target = await prisma.user.findUnique({ where: { id } });
+    const supabase = await createClient();
+    const { data: target, error: targetError } = await supabase.from("profiles").select("id, is_admin").eq("id", id).maybeSingle();
+    if (targetError) throw targetError;
     if (!target) return apiError("User not found.", 404);
-
-    if (target.id === admin.id) {
-      return apiError("You cannot delete your own account.", 400);
+    if (target.id === admin.id) return apiError("You cannot delete your own account.", 400);
+    if (target.is_admin) {
+      const { count, error } = await supabase.from("profiles").select("id", { count: "exact", head: true }).eq("is_admin", true);
+      if (error) throw error;
+      if ((count ?? 0) <= 1) return apiError("At least one admin account is required.", 400);
     }
-
-    if (target.role === ADMIN_ROLE) {
-      const adminCount = await prisma.user.count({ where: { role: ADMIN_ROLE } });
-      if (adminCount <= 1) {
-        return apiError("At least one admin account is required.", 400);
-      }
-    }
-
-    await prisma.user.delete({ where: { id: target.id } });
+    const { error } = await supabase.rpc("admin_delete_user", { target_user_id: target.id });
+    if (error) throw error;
     return NextResponse.json({ ok: true });
   } catch (error) {
     return serverError(error);

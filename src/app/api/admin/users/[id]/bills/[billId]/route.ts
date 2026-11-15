@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
+import { createClient } from "@/lib/supabase/server";
 import { getApiUser } from "@/lib/auth";
 import { isAdminRole } from "@/lib/roles";
 import { apiError, forbidden, serverError, unauthorized } from "@/lib/api";
@@ -11,22 +11,15 @@ export async function DELETE(_request: Request, context: Context) {
     const admin = await getApiUser();
     if (!admin) return unauthorized();
     if (!isAdminRole(admin.role)) return forbidden("Admin access required.");
-
     const { id, billId } = await context.params;
-    const bill = await prisma.bill.findFirst({
-      where: { id: billId, userId: id },
-      select: { id: true },
-    });
-
+    const supabase = await createClient();
+    const { data: bill, error: lookupError } = await supabase.from("bills").select("id").eq("id", billId).eq("user_id", id).maybeSingle();
+    if (lookupError) throw lookupError;
     if (!bill) return apiError("Bill not found.", 404);
-
-    await prisma.$transaction([
-      prisma.notification.updateMany({
-        where: { userId: id, billId: bill.id, readAt: null },
-        data: { readAt: new Date() },
-      }),
-      prisma.bill.delete({ where: { id: bill.id } }),
-    ]);
+    const { error: notificationError } = await supabase.from("notifications").update({ read_at: new Date().toISOString() }).eq("user_id", id).eq("bill_id", bill.id).is("read_at", null);
+    if (notificationError) throw notificationError;
+    const { error } = await supabase.from("bills").delete().eq("id", bill.id).eq("user_id", id);
+    if (error) throw error;
     return NextResponse.json({ ok: true });
   } catch (error) {
     return serverError(error);

@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { requireUser } from "@/lib/auth";
-import { prisma } from "@/lib/prisma";
+import { createClient } from "@/lib/supabase/server";
+import { mapBill } from "@/lib/supabase/records";
 import { serializeBill } from "@/lib/dashboard";
 import { BillsClient } from "@/components/bills/bills-client";
 
@@ -11,10 +12,14 @@ export const metadata: Metadata = {
 
 export default async function BillsPage() {
   const user = await requireUser();
-  const bills = await prisma.bill.findMany({
-    where: { userId: user.id },
-    orderBy: { dueDate: "asc" },
-  });
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("bills")
+    .select("*")
+    .eq("user_id", user.id)
+    .order("due_date", { ascending: true });
+  if (error) throw error;
+  const bills = (data ?? []).map(mapBill);
 
   return (
     <BillsClient
