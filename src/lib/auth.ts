@@ -1,68 +1,48 @@
-import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
-import { SignJWT, jwtVerify } from "jose";
-import bcrypt from "bcryptjs";
-import { prisma } from "./prisma";
-import { isAdminRole } from "./roles";
+import { createClient } from "@/lib/supabase/server";
+import { ADMIN_ROLE, USER_ROLE, isAdminRole } from "./roles";
 
-const COOKIE_NAME = "mcpatenz_session";
-const MAX_AGE = 60 * 60 * 24 * 30;
+export type AppUser = {
+  id: string;
+  name: string;
+  email: string;
+  role: typeof ADMIN_ROLE | typeof USER_ROLE;
+  avatar: string | null;
+  notifyEmail: string | null;
+  currency: string;
+  leadDays: number;
+  createdAt: Date;
+};
 
-function secretKey() {
-  const secret = process.env.AUTH_SECRET;
-  if (!secret && process.env.NODE_ENV === "production") {
-    throw new Error("AUTH_SECRET is required in production");
-  }
-  return new TextEncoder().encode(secret ?? "mcpatenz-development-only-secret");
-}
+export async function getCurrentUser(): Promise<AppUser | null> {
+  const supabase = await createClient();
+  const {
+    data: { user: authUser },
+    error: authError,
+  } = await supabase.auth.getUser();
 
-export async function hashPassword(password: string): Promise<string> {
-  return bcrypt.hash(password, 12);
-}
+  if (authError || !authUser) return null;
 
-export async function verifyPassword(password: string, hash: string): Promise<boolean> {
-  return bcrypt.compare(password, hash);
-}
+  const { data: profile, error } = await supabase
+    .from("profiles")
+    .select("id, name, email, is_admin, avatar, notify_email, currency, lead_days, created_at")
+    .eq("id", authUser.id)
+    .maybeSingle();
 
-export async function createSession(userId: string): Promise<void> {
-  const token = await new SignJWT({ sub: userId })
-    .setProtectedHeader({ alg: "HS256" })
-    .setIssuedAt()
-    .setExpirationTime("30d")
-    .sign(secretKey());
+  if (error) throw error;
+  if (!profile) return null;
 
-  const cookieStore = await cookies();
-  cookieStore.set(COOKIE_NAME, token, {
-    httpOnly: true,
-    sameSite: "lax",
-    secure: process.env.NODE_ENV === "production",
-    path: "/",
-    maxAge: MAX_AGE,
-  });
-}
-
-export async function destroySession(): Promise<void> {
-  const cookieStore = await cookies();
-  cookieStore.delete(COOKIE_NAME);
-}
-
-export async function getSessionUserId(): Promise<string | null> {
-  const cookieStore = await cookies();
-  const token = cookieStore.get(COOKIE_NAME)?.value;
-  if (!token) return null;
-
-  try {
-    const { payload } = await jwtVerify(token, secretKey());
-    return typeof payload.sub === "string" ? payload.sub : null;
-  } catch {
-    return null;
-  }
-}
-
-export async function getCurrentUser() {
-  const userId = await getSessionUserId();
-  if (!userId) return null;
-  return prisma.user.findUnique({ where: { id: userId } });
+  return {
+    id: profile.id,
+    name: profile.name,
+    email: authUser.email ?? profile.email,
+    role: profile.is_admin ? ADMIN_ROLE : USER_ROLE,
+    avatar: profile.avatar,
+    notifyEmail: profile.notify_email,
+    currency: profile.currency,
+    leadDays: profile.lead_days,
+    createdAt: new Date(profile.created_at),
+  };
 }
 
 export async function requireUser() {

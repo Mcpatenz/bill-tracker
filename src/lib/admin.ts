@@ -1,4 +1,5 @@
-import { prisma } from "./prisma";
+import { createClient } from "./supabase/server";
+import { mapBill, mapProfile } from "./supabase/records";
 import { serializeBill, type DashboardBill } from "./dashboard";
 import { daysUntil } from "./dates";
 
@@ -21,12 +22,7 @@ export type AdminUserSummary = {
 
 export type AdminOverview = {
   users: AdminUserSummary[];
-  stats: {
-    users: number;
-    admins: number;
-    bills: number;
-    unpaidBills: number;
-  };
+  stats: { users: number; admins: number; bills: number; unpaidBills: number };
 };
 
 export type AdminUserDetail = {
@@ -44,42 +40,46 @@ export type AdminUserDetail = {
     notificationCount: number;
   };
   bills: DashboardBill[];
-  stats: {
-    totalBills: number;
-    unpaidBills: number;
-    paidBills: number;
-    overdueBills: number;
-    outstanding: number;
-  };
+  stats: { totalBills: number; unpaidBills: number; paidBills: number; overdueBills: number; outstanding: number };
 };
 
 export async function getAdminOverview(): Promise<AdminOverview> {
-  const users = await prisma.user.findMany({
-    orderBy: { createdAt: "desc" },
-    include: {
-      bills: { select: { amount: true, isPaid: true } },
-      _count: { select: { payments: true, notifications: true } },
-    },
-  });
+  const supabase = await createClient();
+  const [profilesResult, billsResult, paymentsResult, notificationsResult] = await Promise.all([
+    supabase.from("profiles").select("id, email, name, is_admin, avatar, notify_email, currency, lead_days, created_at, updated_at").order("created_at", { ascending: false }),
+    supabase.from("bills").select("user_id, amount, is_paid"),
+    supabase.from("payments").select("user_id"),
+    supabase.from("notifications").select("user_id"),
+  ]);
+  if (profilesResult.error) throw profilesResult.error;
+  if (billsResult.error) throw billsResult.error;
+  if (paymentsResult.error) throw paymentsResult.error;
+  if (notificationsResult.error) throw notificationsResult.error;
 
-  const summaries = users.map((user) => {
-    const unpaid = user.bills.filter((bill) => !bill.isPaid);
-
+  const billsByUser = new Map<string, { amount: number; isPaid: boolean }[]>();
+  for (const bill of billsResult.data ?? []) {
+    const userBills = billsByUser.get(bill.user_id) ?? [];
+    userBills.push({ amount: bill.amount, isPaid: bill.is_paid });
+    billsByUser.set(bill.user_id, userBills);
+  }
+  const countByUser = (rows: { user_id: string }[]) => {
+    const counts = new Map<string, number>();
+    for (const row of rows) counts.set(row.user_id, (counts.get(row.user_id) ?? 0) + 1);
+    return counts;
+  };
+  const paymentCounts = countByUser(paymentsResult.data ?? []);
+  const notificationCounts = countByUser(notificationsResult.data ?? []);
+  const summaries = (profilesResult.data ?? []).map((profile) => {
+    const user = mapProfile(profile);
+    const bills = billsByUser.get(user.id) ?? [];
+    const unpaid = bills.filter((bill) => !bill.isPaid);
     return {
-      id: user.id,
-      name: user.name,
-      email: user.email,
-      role: user.role,
-      avatar: user.avatar,
-      currency: user.currency,
-      leadDays: user.leadDays,
-      createdAt: user.createdAt.toISOString(),
-      billCount: user.bills.length,
-      unpaidCount: unpaid.length,
-      paidCount: user.bills.length - unpaid.length,
+      id: user.id, name: user.name, email: user.email, role: user.role, avatar: user.avatar,
+      currency: user.currency, leadDays: user.leadDays, createdAt: user.createdAt.toISOString(),
+      billCount: bills.length, unpaidCount: unpaid.length, paidCount: bills.length - unpaid.length,
       outstanding: unpaid.reduce((total, bill) => total + bill.amount, 0),
-      paymentCount: user._count.payments,
-      notificationCount: user._count.notifications,
+      paymentCount: paymentCounts.get(user.id) ?? 0,
+      notificationCount: notificationCounts.get(user.id) ?? 0,
     };
   });
 
@@ -95,32 +95,28 @@ export async function getAdminOverview(): Promise<AdminOverview> {
 }
 
 export async function getAdminUserDetail(userId: string): Promise<AdminUserDetail | null> {
-  const user = await prisma.user.findUnique({
-    where: { id: userId },
-    include: {
-      bills: { orderBy: { dueDate: "asc" } },
-      _count: { select: { payments: true, notifications: true } },
-    },
-  });
+  const supabase = await createClient();
+  const [profileResult, billsResult, paymentsResult, notificationsResult] = await Promise.all([
+    supabase.from("profiles").select("id, email, name, is_admin, avatar, notify_email, currency, lead_days, created_at, updated_at").eq("id", userId).maybeSingle(),
+    supabase.from("bills").select("*").eq("user_id", userId).order("due_date", { ascending: true }),
+    supabase.from("payments").select("id", { count: "exact", head: true }).eq("user_id", userId),
+    supabase.from("notifications").select("id", { count: "exact", head: true }).eq("user_id", userId),
+  ]);
+  if (profileResult.error) throw profileResult.error;
+  if (billsResult.error) throw billsResult.error;
+  if (paymentsResult.error) throw paymentsResult.error;
+  if (notificationsResult.error) throw notificationsResult.error;
+  if (!profileResult.data) return null;
 
-  if (!user) return null;
-
-  const bills = user.bills.map(serializeBill);
+  const profile = mapProfile(profileResult.data);
+  const bills = (billsResult.data ?? []).map(mapBill).map(serializeBill);
   const unpaid = bills.filter((bill) => !bill.isPaid);
-
   return {
     user: {
-      id: user.id,
-      name: user.name,
-      email: user.email,
-      role: user.role,
-      avatar: user.avatar,
-      notifyEmail: user.notifyEmail,
-      currency: user.currency,
-      leadDays: user.leadDays,
-      createdAt: user.createdAt.toISOString(),
-      paymentCount: user._count.payments,
-      notificationCount: user._count.notifications,
+      id: profile.id, name: profile.name, email: profile.email, role: profile.role,
+      avatar: profile.avatar, notifyEmail: profile.notifyEmail, currency: profile.currency,
+      leadDays: profile.leadDays, createdAt: profile.createdAt.toISOString(),
+      paymentCount: paymentsResult.count ?? 0, notificationCount: notificationsResult.count ?? 0,
     },
     bills,
     stats: {

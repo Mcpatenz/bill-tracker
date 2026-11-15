@@ -1,4 +1,4 @@
-import { prisma } from "./prisma";
+import { createClient } from "./supabase/server";
 import { CURRENCIES } from "./constants";
 import { utcMidnight } from "./dates";
 
@@ -24,17 +24,25 @@ export async function getSiteStats(): Promise<SiteStats> {
     const startOfMonth = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
     const startOfNextMonth = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1));
 
-    const [billsTracked, billsThisMonth, payments, members] = await Promise.all([
-      prisma.bill.count(),
-      prisma.bill.count({
-        where: { dueDate: { gte: startOfMonth, lt: startOfNextMonth } },
-      }),
-      prisma.payment.findMany({ select: { paidAt: true, dueDate: true } }),
-      prisma.user.count(),
+    const supabase = await createClient();
+    const [billsResult, paymentsResult, membersResult] = await Promise.all([
+      supabase.from("bills").select("due_date"),
+      supabase.from("payments").select("paid_at, due_date"),
+      supabase.from("profiles").select("id", { count: "exact", head: true }),
     ]);
-
+    if (billsResult.error) throw billsResult.error;
+    if (paymentsResult.error) throw paymentsResult.error;
+    if (membersResult.error) throw membersResult.error;
+    const bills = billsResult.data ?? [];
+    const payments = paymentsResult.data ?? [];
+    const billsTracked = bills.length;
+    const billsThisMonth = bills.filter((bill) => {
+      const dueDate = new Date(bill.due_date);
+      return dueDate >= startOfMonth && dueDate < startOfNextMonth;
+    }).length;
+    const members = membersResult.count ?? 0;
     const onTime = payments.filter(
-      (payment) => utcMidnight(payment.paidAt) <= utcMidnight(payment.dueDate),
+      (payment) => utcMidnight(new Date(payment.paid_at)) <= utcMidnight(new Date(payment.due_date)),
     ).length;
 
     return {

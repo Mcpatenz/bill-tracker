@@ -1,5 +1,5 @@
 import nodemailer from "nodemailer";
-import type { Bill, User } from "@prisma/client";
+import type { BillRecord, UserRecord } from "./supabase/records";
 import { formatCurrency } from "./format";
 import { daysUntil, formatLongDate } from "./dates";
 
@@ -185,8 +185,8 @@ async function deliver(payload: MailPayload): Promise<MailResult> {
 }
 
 export async function sendBillReminderEmail(
-  user: User,
-  bill: Bill,
+  user: UserRecord,
+  bill: BillRecord,
   daysLeft: number,
 ): Promise<MailResult> {
   const to = user.notifyEmail || user.email;
@@ -230,7 +230,7 @@ export async function sendBillReminderEmail(
   });
 }
 
-export async function sendTestEmail(user: User): Promise<MailResult> {
+export async function sendTestEmail(user: UserRecord): Promise<MailResult> {
   const to = user.notifyEmail || user.email;
   const html = renderEmail({
     preview: "Your Mcpatenz Bill Tracker reminders are working",
@@ -250,13 +250,13 @@ export async function sendTestEmail(user: User): Promise<MailResult> {
   });
 }
 
-export function reminderPreview(bill: Bill, currency: string, daysLeft: number): string {
+export function reminderPreview(bill: BillRecord, currency: string, daysLeft: number): string {
   const amount = formatCurrency(bill.amount, currency);
   if (daysLeft < 0) return `${bill.name} is ${Math.abs(daysLeft)} day${Math.abs(daysLeft) === 1 ? "" : "s"} overdue · ${amount}`;
   if (daysLeft === 0) return `${bill.name} is due today · ${amount}`;
   return `${bill.name} is due in ${daysLeft} day${daysLeft === 1 ? "" : "s"} · ${amount}`;
 }
 
-export function dueInDays(bill: Bill): number {
+export function dueInDays(bill: BillRecord): number {
   return daysUntil(bill.dueDate);
 }

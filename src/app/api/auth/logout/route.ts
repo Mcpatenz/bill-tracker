@@ -1,10 +1,12 @@
 import { NextResponse } from "next/server";
-import { destroySession } from "@/lib/auth";
+import { createClient } from "@/lib/supabase/server";
 import { serverError } from "@/lib/api";
 
 export async function POST() {
   try {
-    await destroySession();
+    const supabase = await createClient();
+    const { error } = await supabase.auth.signOut();
+    if (error) throw error;
     return NextResponse.json({ ok: true });
   } catch (error) {
     return serverError(error);
