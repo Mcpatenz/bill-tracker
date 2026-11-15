@@ -7,13 +7,9 @@ export const dynamic = "force-dynamic";
 export async function GET(request: Request) {
   try {
     const secret = process.env.CRON_SECRET;
-    if (secret) {
-      const header = request.headers.get("authorization");
-      const bearer = header?.replace(/^Bearer\s+/i, "");
-      const query = new URL(request.url).searchParams.get("secret");
-      if (bearer !== secret && query !== secret) {
-        return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-      }
+    const authorization = request.headers.get("authorization");
+    if (!secret || authorization !== `Bearer ${secret}`) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
     const summary = await runReminderSweep();
