@@ -40,6 +40,14 @@ export const settingsSchema = z.object({
   leadDays: z.coerce.number().int().min(0).max(30),
 });
 
+export const adminProfileSchema = settingsSchema.pick({
+  name: true,
+  avatar: true,
+  notifyEmail: true,
+  currency: true,
+  leadDays: true,
+});
+
 export const passwordSchema = z.object({
   currentPassword: z.string().min(1, "Enter your current password"),
   newPassword: z.string().min(8, "Password must be at least 8 characters").max(72),

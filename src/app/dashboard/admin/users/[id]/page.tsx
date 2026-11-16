@@ -14,6 +14,7 @@ import { requireAdmin } from "@/lib/auth";
 import { getAdminUserDetail } from "@/lib/admin";
 import { Avatar } from "@/components/ui/avatar";
 import { AdminUserBills } from "@/components/admin/admin-user-bills";
+import { AdminUserProfileForm } from "@/components/admin/admin-user-profile-form";
 import { formatCurrency } from "@/lib/format";
 import { formatDate } from "@/lib/dates";
 
@@ -147,6 +148,7 @@ export default async function AdminUserPage({ params }: PageProps) {
         </div>
       </div>
 
+      <AdminUserProfileForm user={user} />
       <AdminUserBills userId={user.id} bills={bills} currency={user.currency} />
     </div>
   );
