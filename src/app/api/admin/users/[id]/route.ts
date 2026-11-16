@@ -1,10 +1,44 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { getApiUser } from "@/lib/auth";
-import { ADMIN_ROLE, isAdminRole } from "@/lib/roles";
-import { apiError, forbidden, serverError, unauthorized } from "@/lib/api";
+import { isAdminRole } from "@/lib/roles";
+import { apiError, forbidden, serverError, unauthorized, validationError } from "@/lib/api";
+import { adminProfileSchema } from "@/lib/validation";
 
 type Context = { params: Promise<{ id: string }> };
+
+export async function PUT(request: Request, context: Context) {
+  try {
+    const admin = await getApiUser();
+    if (!admin) return unauthorized();
+    if (!isAdminRole(admin.role)) return forbidden("Admin access required.");
+
+    const { id } = await context.params;
+    const parsed = adminProfileSchema.safeParse(await request.json());
+    if (!parsed.success) return validationError(parsed.error);
+
+    const supabase = await createClient();
+    const { data, error } = await supabase
+      .from("profiles")
+      .update({
+        name: parsed.data.name,
+        avatar: parsed.data.avatar || null,
+        notify_email: parsed.data.notifyEmail || null,
+        currency: parsed.data.currency,
+        lead_days: parsed.data.leadDays,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", id)
+      .select("id")
+      .maybeSingle();
+    if (error) throw error;
+    if (!data) return apiError("User not found.", 404);
+
+    return NextResponse.json({ ok: true });
+  } catch (error) {
+    return serverError(error);
+  }
+}
 
 export async function DELETE(_request: Request, context: Context) {
   try {
