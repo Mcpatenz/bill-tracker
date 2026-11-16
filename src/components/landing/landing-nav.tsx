@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { AnimatePresence, motion } from "motion/react";
-import { ArrowRight, Menu, X } from "lucide-react";
+import { Download, Menu, X } from "lucide-react";
 import { Logo } from "@/components/ui/logo";
 
 const links = [
@@ -12,6 +12,9 @@ const links = [
   { href: "#how-it-works", label: "How it works" },
   { href: "#faq", label: "FAQ" },
 ];
+
+const apkUrl =
+  "https://github.com/Mcpatenz/bill-tracker/releases/latest/download/BillTracker.apk";
 
 export function LandingNav() {
   const [scrolled, setScrolled] = useState(false);
@@ -54,13 +57,14 @@ export function LandingNav() {
           >
             Sign in
           </Link>
-          <Link
-            href="/register"
-            className="group inline-flex h-10 items-center gap-1.5 rounded-xl bg-gradient-to-r from-violet to-[#6d4df0] px-4 text-sm font-semibold text-white shadow-[0_12px_30px_-12px_rgba(139,92,246,0.9)] transition hover:brightness-110"
+
+          <a
+            href={apkUrl}
+            className="inline-flex h-10 items-center gap-2 rounded-xl bg-gradient-to-r from-violet to-[#6d4df0] px-4 text-sm font-semibold text-white shadow-[0_12px_30px_-12px_rgba(139,92,246,0.8)] transition hover:brightness-110"
           >
-            Get started
-            <ArrowRight className="size-3.5 transition-transform group-hover:translate-x-0.5" />
-          </Link>
+            <Download className="size-4" aria-hidden="true" />
+            Download APK
+          </a>
         </div>
 
         <button
@@ -94,6 +98,7 @@ export function LandingNav() {
                   {link.label}
                 </a>
               ))}
+
               <div className="mt-3 flex flex-col gap-2 border-t border-line pt-3">
                 <Link
                   href="/login"
@@ -102,14 +107,15 @@ export function LandingNav() {
                 >
                   Sign in
                 </Link>
-                <Link
-                  href="/register"
+
+                <a
+                  href={apkUrl}
                   onClick={() => setOpen(false)}
                   className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-violet to-[#6d4df0] text-sm font-semibold text-white"
                 >
-                  Get started free
-                  <ArrowRight className="size-4" />
-                </Link>
+                  <Download className="size-4" aria-hidden="true" />
+                  Download Android APK
+                </a>
               </div>
             </nav>
           </motion.div>
