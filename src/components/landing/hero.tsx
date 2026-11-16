@@ -4,10 +4,10 @@ import dynamic from "next/dynamic";
 import Link from "next/link";
 import { motion } from "motion/react";
 import {
-  ArrowRight,
   BellRing,
   Check,
   CheckCircle2,
+  Download,
   Sparkles,
 } from "lucide-react";
 import { formatStatNumber, formatStatRate } from "@/lib/format";
@@ -34,6 +34,9 @@ const item = {
   hidden: { opacity: 0, y: 22 },
   show: { opacity: 1, y: 0, transition: { duration: 0.6, ease: [0.16, 1, 0.3, 1] as const } },
 };
+
+const apkUrl =
+  "https://github.com/Mcpatenz/bill-tracker/releases/latest/download/BillTracker.apk";
 
 export function Hero({ stats }: { stats: SiteStats }) {
   return (
@@ -63,22 +66,23 @@ export function Hero({ stats }: { stats: SiteStats }) {
             variants={item}
             className="mt-6 max-w-xl text-[15px] leading-relaxed text-slate-400 sm:text-base"
           >
-            Mcpatenz Bill Tracker keeps every bill, subscription and recurring payment in one calm view — then
-            emails you automatically before the due date. No spreadsheets. No late fees. No
+            Mcpatenz Bill Tracker keeps every bill, subscription and recurring payment in one calm view —
+            then emails you automatically before the due date. No spreadsheets. No late fees. No
             last-minute panic.
           </motion.p>
 
           <motion.div variants={item} className="mt-8 flex flex-col gap-3 sm:flex-row">
-            <Link
-              href="/register"
-              className="group inline-flex h-12 items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-violet to-[#6d4df0] px-6 text-sm font-semibold text-white shadow-[0_18px_44px_-16px_rgba(139,92,246,1)] transition-all duration-200 hover:brightness-110 active:scale-[0.98]"
+            <a
+              href={apkUrl}
+              className="group inline-flex h-12 items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-violet to-[#6d4df0] px-6 text-sm font-semibold text-white shadow-[0_18px_44px_-16px_rgba(139,92,246,0.55)]"
             >
-              Start tracking free
-              <ArrowRight className="size-4 transition-transform duration-200 group-hover:translate-x-0.5" />
-            </Link>
+              <Download className="size-4" />
+              Download Android APK
+            </a>
+
             <Link
               href="/login"
-              className="inline-flex h-12 items-center justify-center gap-2 rounded-xl border border-line bg-white/[0.04] px-6 text-sm font-semibold text-slate-100 transition-all duration-200 hover:border-line-strong hover:bg-white/[0.08] active:scale-[0.98]"
+              className="inline-flex h-12 items-center justify-center gap-2 rounded-xl border border-line bg-white/[0.04] px-6 text-sm font-semibold text-slate-100 transition-all duration-200 hover:border-white/10 hover:bg-white/[0.06]"
             >
               <BellRing className="size-4 text-mint" />
               Sign in
@@ -102,21 +106,15 @@ export function Hero({ stats }: { stats: SiteStats }) {
             className="mt-9 flex flex-wrap items-center gap-x-6 gap-y-2 border-t border-line pt-6 text-xs text-slate-400"
           >
             <span>
-              <span className="font-semibold text-slate-200">
-                {formatStatNumber(stats.billsTracked)}
-              </span>{" "}
+              <span className="font-semibold text-slate-200">{formatStatNumber(stats.billsTracked)}</span>{" "}
               bills tracked
             </span>
             <span>
-              <span className="font-semibold text-slate-200">
-                {formatStatNumber(stats.currencies)}
-              </span>{" "}
+              <span className="font-semibold text-slate-200">{formatStatNumber(stats.currencies)}</span>{" "}
               currencies supported
             </span>
             <span>
-              <span className="font-semibold text-slate-200">
-                {formatStatRate(stats.onTimeRate)}
-              </span>{" "}
+              <span className="font-semibold text-slate-200">{formatStatRate(stats.onTimeRate)}</span>{" "}
               paid on time
             </span>
           </motion.div>
