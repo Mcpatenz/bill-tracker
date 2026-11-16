@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { LandingNav } from "@/components/landing/landing-nav";
 import { Hero } from "@/components/landing/hero";
+import { AndroidDownload } from "@/components/landing/android-download";
 import { StatsStrip } from "@/components/landing/stats-strip";
 import { Features } from "@/components/landing/features";
 import { Showcase } from "@/components/landing/showcase";
@@ -17,7 +18,7 @@ const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000";
 export const metadata: Metadata = {
   title: "Mcpatenz Bill Tracker — Bill Tracking & Due Date Reminders",
   description:
-    "Track bills, subscriptions and recurring payments in one calm dashboard. Mcpatenz Bill Tracker sends automatic email reminders to your Gmail or any address before due dates. Free, private and responsive.",
+    "Track bills, subscriptions and recurring payments in one calm dashboard. Mcpatenz Bill Tracker sends automatic email reminders to your Gmail or any address before due dates. Free, private and built for every device.",
   alternates: { canonical: "/" },
 };
 
@@ -100,9 +101,11 @@ export default async function HomePage() {
       >
         Skip to content
       </a>
+
       <LandingNav />
       <main id="main">
         <Hero stats={stats} />
+        <AndroidDownload />
         <StatsStrip stats={stats} />
         <Features />
         <Showcase />
@@ -110,6 +113,7 @@ export default async function HomePage() {
         <Faq />
         <FinalCta />
       </main>
+
       <Footer />
     </>
   );
