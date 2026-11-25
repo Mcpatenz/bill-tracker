@@ -66,9 +66,13 @@ Deno.serve(async (request: Request) => {
     const profileById = new Map(profiles.map((profile) => [String(profile.id), profile]));
     const todayStart = new Date();
     todayStart.setUTCHours(0, 0, 0, 0);
-    const notifiedToday = new Set(notifications
-      .filter((item) => item.bill_id && dayNumber(String(item.created_at)) >= dayNumber(todayStart))
-      .map((item) => `${item.user_id}:${item.bill_id}`));
+    const notificationsToday = new Map<string, Row>();
+    for (const notification of notifications) {
+      if (!notification.bill_id || dayNumber(String(notification.created_at)) < dayNumber(todayStart)) continue;
+      const key = `${notification.user_id}:${notification.bill_id}`;
+      const existing = notificationsToday.get(key);
+      if (!existing || notification.channel === "EMAIL") notificationsToday.set(key, notification);
+    }
     const summary = { users: profiles.length, checked: 0, notified: 0, emailed: 0, skipped: 0, failed: 0 };
     const reminders: Row[] = [];
     const now = new Date().toISOString();
@@ -86,7 +90,8 @@ Deno.serve(async (request: Request) => {
         continue;
       }
       const key = `${bill.user_id}:${bill.id}`;
-      if (notifiedToday.has(key)) {
+      const existingNotification = notificationsToday.get(key);
+      if (existingNotification?.channel === "EMAIL") {
         summary.skipped += 1;
         continue;
       }
@@ -95,13 +100,17 @@ Deno.serve(async (request: Request) => {
       const title = days < 0 ? `${bill.name} is overdue` : days === 0 ? `${bill.name} is due today` : `${bill.name} is due in ${days} day${days === 1 ? "" : "s"}`;
       const amount = new Intl.NumberFormat("en-US", { style: "currency", currency: String(profile.currency || "USD") }).format(Number(bill.amount));
       const message = `${amount} · due ${dateLabel}. Open Mcpatenz Bill Tracker to mark it as paid.`;
-      const { data: notification, error: insertError } = await supabase.from("notifications").insert({
-        user_id: String(profile.id), bill_id: String(bill.id), title, body: message, channel: "IN_APP",
-      }).select("id").single();
-      if (insertError) {
-        summary.failed += 1;
-        console.error("[reminder-sweep] Notification insert failed:", insertError.message);
-        continue;
+      let notificationId: unknown = existingNotification?.id;
+      if (!notificationId) {
+        const { data: notification, error: insertError } = await supabase.from("notifications").insert({
+          user_id: String(profile.id), bill_id: String(bill.id), title, body: message, channel: "IN_APP",
+        }).select("id").single();
+        if (insertError) {
+          summary.failed += 1;
+          console.error("[reminder-sweep] Notification insert failed:", insertError.message);
+          continue;
+        }
+        notificationId = notification.id;
       }
       const { error: updateError } = await supabase.from("bills").update({ last_notified_at: now }).eq("id", String(bill.id));
       if (updateError) {
@@ -109,10 +118,10 @@ Deno.serve(async (request: Request) => {
         console.error("[reminder-sweep] Bill timestamp update failed:", updateError.message);
         continue;
       }
-      notifiedToday.add(key);
+      notificationsToday.set(key, { id: notificationId, channel: "IN_APP" });
       summary.notified += 1;
       reminders.push({
-        notificationId: notification.id,
+        notificationId,
         user: {
           id: profile.id, name: profile.name, email: profile.email,
           notifyEmail: profile.notify_email, currency: profile.currency,
