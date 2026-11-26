@@ -83,7 +83,7 @@ Deno.serve(async (request: Request) => {
       if (!profile) continue;
       summary.checked += 1;
       const days = daysUntil(String(bill.due_date));
-      const window = Math.min(Number(bill.reminder_days_before), Number(profile.lead_days));
+      const window = Number(bill.reminder_days_before);
       if (days > window || days < -7) continue;
       if (bill.last_notified_at && sameUtcDay(String(bill.last_notified_at), new Date())) {
         summary.skipped += 1;

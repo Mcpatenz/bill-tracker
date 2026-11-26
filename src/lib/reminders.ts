@@ -54,7 +54,7 @@ export async function syncUserReminders(userId: string): Promise<number> {
   let created = 0;
   for (const bill of bills) {
     const days = daysUntil(bill.dueDate);
-    const window = Math.min(bill.reminderDaysBefore, user.leadDays);
+    const window = bill.reminderDaysBefore;
     if (days > window || days < -7) continue;
     if (bill.lastNotifiedAt && sameUtcDay(bill.lastNotifiedAt, now)) continue;
     if (notifiedToday.has(bill.id)) continue;
